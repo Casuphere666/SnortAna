@@ -4,17 +4,20 @@
 
 ######################
 # Author  : Casuphere
-# Version : 0.01
+# Version : 0.1
 ######################
 
 import re
+import os
 
-filename = ".\\Snort\\snortrules-snapshot-3034\\rules\\snort3-browser-firefox.rules"
+dic = ".\\Snort\\snortrules-snapshot-3034\\rules"
+#dic = ".\\Snort\\snortrules-snapshot-3034\\rules\\snort3-app-detect.rules"
 
 showRule = 1  #if 0, only output proto statistics
+savetoFile = 1  #if 1,the conent will save to file
 
-showTuple = 1  #if 1, output tuple for each rule
-showStr = 1    #if 1, output Str for each rule
+showTuple = 0  #if 1, output tuple for each rule
+showStr = 0    #if 1, output Str for each rule
 showError = 1  #if 1, output error rule
 
 
@@ -34,13 +37,22 @@ class SnortRule:
         if(cutline[4]=="->"):
             for seq in R:
                 Tuple.append(cutline[seq])
-        elif(cutline[5]=="<-"):
+        elif(cutline[4]=="<-"):
             for seq in L:
                 Tuple.append(cutline[seq])
-        else: #unknown direction
+        elif(cutline[4]=="<>"): #any direction,we regard it as ->
+            for seq in R:
+                Tuple.append(cutline[seq])
+        elif(cutline[2]=="("): #No need for tuple
+            ign = 4
+            while(ign):
+                Tuple.append("/")
+                ign-=1
+            Tuple.append(cutline[1])
+        else: #unknown type
                 Tuple[0]="Unknown Direction"
                 return Tuple
-        self.Proto = Tuple[1]
+        self.Proto = Tuple[5]
         return Tuple  
 
     def getStr(self,line):
@@ -48,12 +60,21 @@ class SnortRule:
         cont_rem = "content:\"([^\"]*)\""
         pcrelist = re.findall(pcre_rem, line)
         contlist = re.findall(cont_rem,line)
-        
         Str = []
+        pcrefile = 0
+        contfile = 0
+        if(savetoFile):
+            pcrefile = open("pcre.txt", 'a+')
+            contfile = open("cont.txt", 'a+')
         for item in pcrelist:
             Str.append(item)
+            if(savetoFile):pcrefile.write(item+"\n")
         for item in contlist:
             Str.append(item)
+            if(savetoFile):contfile.write(item+"\n")
+        if(savetoFile):
+            pcrefile.close()
+            contfile.close()
         return Str
     
     rid = 0
@@ -71,7 +92,6 @@ Ana_proto_dic = {}
 
 def showAna(rulelist):
     print("----------------SnortAna--------------")
-    print("Rule File:",filename)
     print("Total Rule:",Rcnt)
     print("Ana Failed:",Ana_error_cnt)
     print("--------------------------------------")
@@ -79,24 +99,41 @@ def showAna(rulelist):
     for item in Ana_proto_dic:
         print("<",item,">:",Ana_proto_dic[item])
 
-    print("[Rules]")
     if(showRule):
+        print("[Rules]")
         for rule in rulelist:
-            print("R",rule.rid,": ",end="")
-            #print(rule.Tuple[0])
             if(rule.Tuple[0]=="OK"):
                 if(showTuple):
+                    print("R",rule.rid,": ",end="")
                     print(rule.Tuple[1:],"   ",end="")
                 if(showStr):
-                    print(rule.Str,"   ")
+                    print(rule.Str,"   ",end="")
+                if(showTuple or showStr):
+                    print()
             else:
                 if(showError):
                     print("R",rule.rid," ErrLine:",rule.line)
         
 
-def rulesAna(filename):
-    with open(filename, 'r') as f:
-        lines = f.readlines()
+def rulesAna(dic):
+    lines=[]
+    if(os.path.isdir(dic)):
+        Fcnt = 0
+        for filename in os.listdir(dic):
+            filepath = os.path.join(dic,filename)
+            if(os.path.isfile(filepath) and filepath.endswith('.rules')):
+                #print("[Ruleset Found]",filepath)
+                with open(filepath, 'r') as f:
+                    lines += f.readlines()
+                Fcnt+=1
+        print("[SnortAna] Work for ",Fcnt," rulesets in ",dic)
+    elif(os.path.isfile(dic)):
+        with open(dic, 'r') as f:
+            lines = f.readlines()
+        print("[SnortAna] Work for a single ruleset: ",dic)
+    else:
+        print("[Err]Invalid File Path. It should be an exist file or a folder")
+
     global Rcnt
     global Ana_error_cnt
     rulelist = []
@@ -114,10 +151,10 @@ def rulesAna(filename):
                 Ana_proto_dic[rule.Proto]=1
         else:
             Ana_error_cnt+=1
-            
+
     showAna(rulelist)
 
     
-rulesAna(filename)
+rulesAna(dic)
 
 
